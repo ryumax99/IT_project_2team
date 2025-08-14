@@ -72,22 +72,22 @@ public class BoardController {
         boolean canAccess = false;
         boolean isAdmin = userDetails != null && userDetails.isAdmin(); // 관리자 여부 확인
 
-// 추가! 관리자(ROLE_ADMIN)인 경우 모든 게시글에 접근 가능
+        // 관리자(ROLE_ADMIN)인 경우 모든 게시글에 접근 가능
         if (isAdmin) {
             canAccess = true;
         }
 
-// 1. 본인 글인지 확인
+        // 1. 본인 글인지 확인
         if (userDetails != null && userDetails.getEmail().equals(board.getWriterEmail())) {
             canAccess = true;
         }
 
-// 2. 성별 제한이 없는 글인지 확인
+        // 2. 성별 제한이 없는 글인지 확인
         if (!canAccess && "성별상관무".equals(board.getGenderLimit())) {
             canAccess = true;
         }
 
-// 3. 성별 제한이 있는 글일 경우 (수정된 로직)
+        // 3. 성별 제한이 있는 글일 경우 (수정된 로직)
         if (!canAccess && userDetails != null) {
             String userGender = userDetails.getGender(); // 예: "female"
             String boardLimit = board.getGenderLimit();  // 예: "여"
@@ -123,7 +123,6 @@ public class BoardController {
         if (userDetails != null) {
             model.addAttribute("loggedInNickname", userDetails.getNickname());
             model.addAttribute("loggedInUserEmail", userDetails.getEmail());
-// 추가!
             model.addAttribute("isAdmin", isAdmin); // 관리자 여부를 템플릿으로 전달 (추가)
         }
         return "read";
@@ -250,111 +249,5 @@ public class BoardController {
         return "redirect:/board/list";
     }
 
-    // =================================================================
-    // 3. REST API (댓글 처리)
-    // =================================================================
 
-    /**
-     * 댓글 작성 API
-     */
-    @PostMapping("/api/board/comment")
-    @ResponseBody
-    public ResponseEntity<Map<String, Object>> addCommentApi(@RequestParam("boardId") Long boardId,
-                                                             @RequestParam("content") String content,
-                                                             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Map<String, Object> response = new HashMap<>();
-        if (userDetails == null) {
-            response.put("success", false);
-            response.put("message", "로그인이 필요합니다.");
-            return ResponseEntity.status(401).body(response); // 401: Unauthorized
-        }
-        try {
-            // 서비스 호출 시, 닉네임과 이메일 모두 전달
-            Comment comment = commentService.saveComment(boardId, content, userDetails.getNickname(), userDetails.getEmail());
-
-            Map<String, Object> commentData = new HashMap<>();
-            commentData.put("id", comment.getId());
-            commentData.put("content", comment.getContent());
-            commentData.put("writer", comment.getWriter());
-            commentData.put("writerEmail", comment.getWriterEmail());
-            commentData.put("createdAt", comment.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
-            response.put("success", true);
-            response.put("comment", commentData);
-            return ResponseEntity.ok(response);
-        }
-
-        catch (Exception e) {
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
-        }
-    }
-
-    /**
-     * 댓글 수정 API
-     */
-    @PutMapping("/api/board/comment/{id}")
-    @ResponseBody
-    public ResponseEntity<Map<String, Object>> updateComment(@PathVariable("id") Long commentId,
-                                                             @RequestBody Map<String, String> payload,
-                                                             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Map<String, Object> response = new HashMap<>();
-        if (userDetails == null) {
-            response.put("success", false);
-            response.put("message", "로그인이 필요합니다.");
-            return ResponseEntity.status(401).body(response);
-        }
-        try {
-            String content = payload.get("content");
-            // 서비스 호출 시, 권한 확인을 위해 현재 로그인한 사용자의 이메일과 isAdmin 여부 전달
-            Comment updatedComment = commentService.updateComment(commentId, content, userDetails.getEmail(), userDetails.isAdmin());
-            // 반환된 updatedComment가 영속성 컨텍스트 외부에서 변경되어 merge가 필요할 수 있습니다.
-            // CommentService에서 save()를 호출하도록 수정했으므로 문제 없을 것입니다.
-
-            Map<String, Object> commentData = new HashMap<>();
-            commentData.put("id", updatedComment.getId());
-            commentData.put("content", updatedComment.getContent());
-            response.put("success", true);
-            response.put("comment", commentData);
-            return ResponseEntity.ok(response);
-        } catch (AccessDeniedException e) {
-            response.put("success", false);
-            response.put("message", "수정 권한이 없습니다.");
-            return ResponseEntity.status(403).body(response); // 403: Forbidden
-        } catch (Exception e) {
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
-        }
-    }
-
-    /**
-     * 댓글 삭제 API
-     */
-    @DeleteMapping("/api/board/comment/{id}")
-    @ResponseBody
-    public ResponseEntity<Map<String, Object>> deleteCommentApi(@PathVariable("id") Long commentId,
-                                                                @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Map<String, Object> response = new HashMap<>();
-        if (userDetails == null) {
-            response.put("success", false);
-            response.put("message", "로그인이 필요합니다.");
-            return ResponseEntity.status(401).body(response);
-        }
-        try {
-            // 서비스 호출 시, 권한 확인을 위해 현재 로그인한 사용자의 이메일과 isAdmin 여부 전달
-            commentService.deleteComment(commentId, userDetails.getEmail(), userDetails.isAdmin());
-            response.put("success", true);
-            response.put("message", "댓글이 삭제되었습니다.");
-            return ResponseEntity.ok(response);
-        } catch (AccessDeniedException e) {
-            response.put("success", false);
-            response.put("message", "삭제 권한이 없습니다.");
-            return ResponseEntity.status(403).body(response); // 403: Forbidden
-        } catch (Exception e) {
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
-        }
-    }
 }
